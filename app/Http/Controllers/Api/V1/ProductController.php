@@ -7,6 +7,7 @@ use App\Http\Requests\CreateProductRequest;
 use App\Http\Requests\UpdateProductRequest;
 use App\Models\Product;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -19,7 +20,10 @@ class ProductController extends Controller
     {
         try {
             $perPage = $request->query('per_page', 10);
-            $products = Product::orderBy('created_at', 'desc')->paginate($perPage);
+            $products = Cache::remember('products', 60, function () use ($perPage) {
+                return Product::orderBy('created_at', 'desc')->paginate($perPage);
+            });
+
             return response()->json([
                 'data' => $products
             ]);
@@ -61,6 +65,9 @@ class ProductController extends Controller
                 'status' => 1
             ]);
 
+            // Clear cache
+            Cache::forget("products");
+
             return response()->json([
                 'message' => "Product created successfully",
             ], 201);
@@ -78,7 +85,11 @@ class ProductController extends Controller
     public function show(string $id)
     {
         try {
-            $product = Product::find($id);
+
+            $product = Cache::remember('product', 60, function () use ($id) {
+                return Product::find($id);
+            });
+
             if (!$product) {
                 return response()->json([
                     "message" => "Product not found"
@@ -109,7 +120,7 @@ class ProductController extends Controller
             }
 
             //handle thumbnail
-            if($request->hasFile('thumbnail')) {
+            if ($request->hasFile('thumbnail')) {
                 if ($product->thumbnail) {
                     Storage::disk('public')->delete($product->thumbnail);
                 }
@@ -117,7 +128,7 @@ class ProductController extends Controller
             }
 
             //handle images
-            if($request->hasFile('images')) {
+            if ($request->hasFile('images')) {
                 $images = json_decode($product->images, true);
                 if (!empty($images)) {
                     foreach ($images as $image) {
@@ -145,6 +156,11 @@ class ProductController extends Controller
                 'catId' => $request->catId,
                 'status' => $request->status
             ]);
+
+            // Clear caches
+            Cache::forget("products");
+            Cache::forget("product");
+
             return response()->json([
                 'message' => 'Product updated successfully'
             ], 200);
@@ -174,12 +190,16 @@ class ProductController extends Controller
             }
 
             $images = json_decode($product->images, true);
-            
+
             if (!empty($images)) {
                 foreach ($images as $image) {
                     Storage::disk('public')->delete($image);
                 }
             }
+
+            // Clear caches
+            Cache::forget("products");
+            Cache::forget("product");
 
             $product->delete();
             return response()->json([

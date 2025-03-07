@@ -8,7 +8,7 @@ use App\Http\Requests\updateCategoryRequest;
 use App\Models\Category;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
-
+use Illuminate\Support\Facades\Cache;
 
 class CategoryController extends Controller
 {
@@ -19,7 +19,11 @@ class CategoryController extends Controller
     {
         try {
             $perPage = $request->query('per_page', 10);
-            $categories = Category::orderBy('created_at', 'desc')->paginate($perPage);
+            
+            $categories = Cache::remember('categories', 60, function() use ($perPage){
+                return Category::orderBy('created_at', 'desc')->paginate($perPage);
+            });
+
             return response()->json([
                 'categories' => $categories
             ], 200);
@@ -42,6 +46,10 @@ class CategoryController extends Controller
                 'slug' => Str::slug($data['name']),
                 'status' => 1
             ]);
+
+            //clear cache
+            Cache::forget('categories');
+
             return response()->json([
                 'message' => 'Category created successfully',
             ], 201);
@@ -58,7 +66,10 @@ class CategoryController extends Controller
     public function show(string $id)
     {
         try {
-            $category = Category::findOrFail($id);
+            $category = Cache::remember('category', 60, function() use ($id){
+                return Category::findOrFail($id);
+            });
+
             return response()->json([
                 'category' => $category
             ], 200);
@@ -82,6 +93,11 @@ class CategoryController extends Controller
                 'slug' => Str::slug($data['name']),
                 'status' => $data['status']
             ]);
+
+            //clear cache
+            Cache::forget('categories');
+            Cache::forget('category');
+
             return response()->json([
                 'message' => 'Category updated successfully'
             ], 200);
@@ -100,6 +116,11 @@ class CategoryController extends Controller
         try {
             $category = Category::findOrFail($id);
             $category->delete();
+
+            //clear cache
+            Cache::forget('categories');
+            Cache::forget('category');
+
             return response()->json([
                 'message' => 'Category deleted successfully'
             ], 200);
